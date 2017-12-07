@@ -1,0 +1,38 @@
+﻿{
+  "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "eastus2"
+    },
+    "virtualMachineName": {
+      "value": "SDC0"
+    },
+    "adminUsername": {
+      "value": "vadmin"
+    },
+    "storageAccountName": {
+      "value": "101eystorepoc"
+    },
+    "virtualNetworkName": {
+      "value": "VNET02"
+    },
+
+    "adminPassword": {
+      "value": "Test@2016"
+    },
+    "subnetName": {
+      "value": "DC-ISO-Subnet"
+    },
+    "parentDomain": {
+      "value": "contosoad.com"
+    },
+    "domainName": {
+      "value": "sd0"
+    },
+    "toplevelForest": {
+      "value": "contosoad.com"
+    }
+  }
+  
+}

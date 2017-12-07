@@ -1,0 +1,555 @@
+﻿{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+  "parameters": {
+    "VirtualNetworkName": {
+      "type": "string",
+      "defaultValue": "VNET02"
+    },
+    "vnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.97.0.0/16"
+    },
+    "DCOpenSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.97.0.0/24"
+    },
+    "DCISOSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.97.1.0/24"
+    },
+    "DMZ-SubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.97.2.0/24"
+    },
+    "App-SubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.97.3.0/24"
+    },
+    "User-SubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.97.4.0/24"
+    },
+    "dnsIP": {
+      "type": "string",
+      "defaultValue": "10.97.0.4"
+    }
+  },
+  "variables": {
+    "vnetSubnetName": [
+      "DC-Open-Subnet",
+      "DMZ-Subnet",
+      "DC-ISO-Subnet",
+      "App-Subnet",
+      "User-Subnet"
+    ],
+    "VnetID": "[resourceId('Microsoft.Network/virtualNetworks',parameters('VirtualNetworkName'))]",
+    "DCOpenSubnetRef": "[concat(variables('VnetID'), '/subnets/', variables('vnetSubnetName')[0])]",
+    "DMZ-SubnetRef": "[concat(variables('VnetID'), '/subnets/', variables('vnetSubnetName')[1])]",
+    "DCISOubnetRef": "[concat(variables('VnetID'),'/subnets/',variables('vnetSubnetName')[2])]",
+    "AppSubnetRef": "[concat(variables('VnetID'),'/subnets/',variables('vnetSubnetName')[3])]",
+    "UserSubnetRef": "[concat(variables('VnetID'),'/subnets/',variables('vnetSubnetName')[4])]",
+    "Subnets": {
+      "list": [
+        "[concat(variables('VnetID'), '/subnets/', variables('vnetSubnetName')[0])]",
+        "[concat(variables('VnetID'), '/subnets/', variables('vnetSubnetName')[1])]",
+        "[concat(variables('VnetID'), '/subnets/', variables('vnetSubnetName')[2])]",
+        "[concat(variables('VnetID'), '/subnets/', variables('vnetSubnetName')[3])]",
+        "[concat(variables('VnetID'), '/subnets/', variables('vnetSubnetName')[4])]"
+      ]
+    },
+    "DCOPenSubnetIPArray": "[split(parameters('DCOpenSubnetPrefix'),'.')]",
+    "DNSServer1IP": "[concat(variables('DCOPenSubnetIPArray')[ 0 ],'.',variables('DCOPenSubnetIPArray')[ 1 ],'.',variables('DCOPenSubnetIPArray')[ 2 ],'.','4')]",
+    "DNSServer2IP": "[concat(variables('DCOPenSubnetIPArray')[ 0 ],'.',variables('DCOPenSubnetIPArray')[ 1 ],'.',variables('DCOPenSubnetIPArray')[ 2 ],'.','5')]",
+    "vnetDNSList": [
+      
+      "[variables('DNSServer1IP')]",
+      "[variables('DNSServer2IP')]"
+    ]
+
+  },
+  "resources": [
+    // Virtual Network
+    {
+      "comments": "# Virtual Network",
+      "name": "[parameters('VirtualNetworkName')]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [
+        "Microsoft.Network/networkSecurityGroups/OpenDCSubnetNSG",
+        "Microsoft.Network/networkSecurityGroups/DMZSubnetNSG"
+      ],
+      "tags": {
+        "displayName": "vnet"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('vnetPrefix')]"
+          ]
+        },
+        "dhcpOptions": {
+          "dnsServers": "[variables('vnetDNSList')]"
+        },
+        "subnets": [
+          {
+            "name": "[variables('vnetSubnetName')[0]]",
+            "properties": {
+              "addressPrefix": "[parameters('DCOpenSubnetPrefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups','OpenDCSubnetNSG')]"
+              }
+            }
+          },
+          {
+            "name": "[variables('vnetSubnetName')[1]]",
+            "properties": {
+              "addressPrefix": "[parameters('DMZ-SubnetPrefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups','DMZSubnetNSG')]"
+              }
+            }
+          },
+          {
+            "name": "[variables('vnetSubnetName')[2]]",
+            "properties": {
+              "addressPrefix": "[parameters('DCISOSubnetPrefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups','DCISOSubnetNSG')]"
+              }
+            }
+          },
+          {
+            "name": "[variables('vnetSubnetName')[3]]",
+            "properties": {
+              "addressPrefix": "[parameters('App-SubnetPrefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups','AppSubnetNSG')]"
+              }
+            }
+          },
+          {
+            "name": "[variables('vnetSubnetName')[4]]",
+            "properties": {
+              "addressPrefix": "[parameters('User-SubnetPrefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups','UserSubnetNSG')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    //NSG OpenDC
+    {
+      "comments": "# NSG",
+      "name": "OpenDCSubnetNSG",
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "be-default-allow-rdp",
+            "properties": {
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "3389",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 1000,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "be-default-allow-all-in",
+            "properties": {
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 1100,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "be-default-allow-all-out",
+            "properties": {
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "10.97.1.0/24",
+              "access": "Allow",
+              "priority": 1200,
+              "direction": "Outbound"
+            }
+          }
+        ]
+      }
+    },
+    // NSG FE
+    {
+      "comments": "# NSG",
+      "name": "DMZSubnetNSG",
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "fe-default-allow-rdp",
+            "properties": {
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "3389",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 1000,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "fe-default-allow-443-in",
+            "properties": {
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 1100,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "fe-default-allow-443-out",
+            "properties": {
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 1200,
+              "direction": "Outbound"
+            }
+          },
+          {
+            "name": "fe-default-allow-80-in",
+            "properties": {
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "80",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 1300,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "fe-default-allow-80-out",
+            "properties": {
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "80",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 1400,
+              "direction": "Outbound"
+            }
+          },
+          {
+            "name": "AllowAzureLoadBalancerInBound",
+            "properties": {
+              "description": "Allow inbound traffic from azure load balancer",
+              "direction": "Inbound",
+              "priority": 500,
+              "protocol": "*",
+              "sourceAddressPrefix": "AzureLoadBalancer",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "*",
+              "access": "Allow"
+            }
+          }
+        ]
+      }
+    },
+    // NSG Apps
+    {
+      "name": "AppSubnetNSG",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "DC-ISO-outbound",
+            "properties": {
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "[parameters('DCISOSubnetPrefix')]",
+              "access": "Deny",
+              "priority": 1000,
+              "direction": "Outbound"
+            }
+          },
+          {
+            "name": "https-any-outbound",
+            "properties": {
+              "provisioningState": "Succeeded",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 1200,
+              "direction": "Outbound"
+            }
+          },
+          {
+            "name": "DC-Open-outbound",
+            "properties": {
+              "provisioningState": "Succeeded",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "[parameters('DCOpenSubnetPrefix')]",
+              "access": "Allow",
+              "priority": 1100,
+              "direction": "Outbound"
+            }
+          },
+
+
+          {
+            "name": "RDP-Internet-inbound",
+            "properties": {
+              "provisioningState": "Succeeded",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "3389",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 900,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "DC-ISO-inbound",
+            "properties": {
+              "provisioningState": "Succeeded",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "[parameters('DCISOSubnetPrefix')]",
+              "destinationAddressPrefix": "*",
+              "access": "Deny",
+              "priority": 1000,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "DC-Open-inbound",
+            "properties": {
+              "provisioningState": "Succeeded",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "[parameters('DCOpenSubnetPrefix')]",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 1200,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "http-vnet-inbound",
+            "properties": {
+              "provisioningState": "Succeeded",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 1300,
+              "direction": "Inbound"
+            }
+          }
+        ]
+      }
+    },
+    // NSG
+    {
+      "name": "DCISOSubnetNSG",
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "dc-open-outbound",
+            "properties": {
+              "provisioningState": "Succeeded",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "[parameters('DCOpenSubnetPrefix')]",
+              "access": "Allow",
+              "priority": 1200,
+              "direction": "Outbound"
+            }
+          },
+          {
+            "name": "https-any-outbound",
+            "properties": {
+              "provisioningState": "Succeeded",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "Internet",
+              "access": "Allow",
+              "priority": 1300,
+              "direction": "Outbound"
+            }
+          },
+          {
+            "name": "default-rdp-inbound-any",
+            "properties": {
+              "provisioningState": "Succeeded",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "3389",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 1000,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "DC-Open-inbound",
+            "properties": {
+              "provisioningState": "Succeeded",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "[parameters('DCOpenSubnetPrefix')]",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 1200,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "app-subnet-inbound",
+            "properties": {
+              "provisioningState": "Succeeded",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "[parameters('App-SubnetPrefix')]",
+              "destinationAddressPrefix": "*",
+              "access": "Deny",
+              "priority": 1100,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "User-subnet-inbound",
+            "properties": {
+              "provisioningState": "Succeeded",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "[parameters('User-SubnetPrefix')]",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 1400,
+              "direction": "Inbound"
+            }
+          }
+        ]
+      }
+    },
+    //NSG Users
+    {
+      "name": "UserSubnetNSG",
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "user-http-oubound",
+            "properties": {
+              "direction": "Outbound",
+              "priority": 1000,
+              "destinationAddressPrefix": "Internet",
+              "sourceAddressPrefix": "[parameters('User-SubnetPrefix')]",
+              "destinationPortRange": "443",
+              "sourcePortRange": "*",
+              "protocol": "Tcp",
+              "access": "Allow"
+            }
+          },
+          {
+            "name": "dc-iso-outbound",
+            "properties": {
+              "direction": "Outbound",
+              "priority": 1200,
+              "destinationAddressPrefix": "[parameters('DCISOSubnetPrefix')]",
+              "sourceAddressPrefix": "[parameters('User-SubnetPrefix')]",
+              "destinationPortRange": "*",
+              "sourcePortRange": "*",
+              "protocol": "*",
+              "access": "Allow"
+            }
+          },
+          {
+            "name": "user-rdp-inbound",
+            "properties": {
+              "direction": "Inbound",
+              "priority": 1000,
+              "protocol": "Tcp",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "3389",
+              "sourcePortRange": "*",
+              "access": "Allow"
+            }
+
+          }
+
+        ]
+      }
+    }
+  ],
+
+  "outputs": {
+    "VnetId": {
+      "type": "string",
+      "value":"[variables('VnetID')"
+    },
+    "OpenDCSubnet": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/networkSecurityGroups','OpenDCSubnetNSG')]"
+    }
+  }
+      }
